@@ -35,13 +35,18 @@
     <!-- TAB 1: LIVE TRACKER -->
     <div id="tab-tracker" class="space-y-4">
       <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 text-center">
-        <!-- Status indicator -->
-        <div id="wakeLockNotice" class="hidden mb-3 text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full border border-amber-200 inline-block">
+        <!-- Status indicator Wake Lock -->
+        <div id="wakeLockNotice" class="hidden mb-2 text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full border border-amber-200 inline-block">
           <i class="fa-solid fa-sun"></i> Scherm blijft actief aan tijdens rit
         </div>
 
         <div class="text-5xl font-black text-slate-900 tracking-tight mb-1" id="live-distance">0.00</div>
-        <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-6">Kilometer</div>
+        <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Kilometer</div>
+
+        <!-- Realtime GPS Status Indicator -->
+        <div id="gps-status" class="text-xs text-slate-400 mb-4 bg-slate-50 py-1.5 px-3 rounded-lg border border-slate-100 inline-block font-mono">
+          GPS stand-by
+        </div>
 
         <div class="grid grid-cols-2 gap-4 py-3 border-y border-slate-100 text-slate-600 mb-6">
           <div>
@@ -131,15 +136,15 @@
     let distanceKm = 0;
     let lastCoords = null;
     let wakeLock = null;
+    let updateCount = 0;
 
-    // Wake Lock inschakelen om scherm wakker te houden
     async function requestWakeLock() {
       if ('wakeLock' in navigator) {
         try {
           wakeLock = await navigator.wakeLock.request('screen');
           document.getElementById('wakeLockNotice').classList.remove('hidden');
         } catch (err) {
-          console.log('Wake Lock kon niet worden ingeschakeld:', err);
+          console.log('Wake Lock fout:', err);
         }
       }
     }
@@ -160,6 +165,8 @@
 
     function toggleTracker() {
       const btn = document.getElementById('start-btn');
+      const statusEl = document.getElementById('gps-status');
+
       if (!isTracking) {
         if (!navigator.geolocation) {
           alert('GPS wordt niet ondersteund door deze browser.');
@@ -169,8 +176,13 @@
         distanceKm = 0;
         secondsElapsed = 0;
         lastCoords = null;
+        updateCount = 0;
+
         btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop & Rit Opslaan';
         btn.className = 'flex-1 py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-md transition flex items-center justify-center gap-2';
+
+        statusEl.className = 'text-xs text-amber-600 mb-4 bg-amber-50 py-1.5 px-3 rounded-lg border border-amber-200 inline-block font-mono';
+        statusEl.innerHTML = '<i class="fa-solid fa-satellite animate-pulse"></i> GPS zoekt satellieten...';
 
         requestWakeLock();
 
@@ -186,10 +198,17 @@
 
         watchId = navigator.geolocation.watchPosition(
           (pos) => {
-            const { latitude, longitude } = pos.coords;
+            updateCount++;
+            const { latitude, longitude, accuracy } = pos.coords;
+            const acc = Math.round(accuracy);
+
+            statusEl.className = 'text-xs text-emerald-700 mb-4 bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-200 inline-block font-mono';
+            statusEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> GPS actief (±${acc}m | #${updateCount})`;
+
             if (lastCoords) {
               const d = calcDistance(lastCoords.lat, lastCoords.lng, latitude, longitude);
-              if (d > 0.005) { // Filter kleine trillingen
+              // Telt elke verplaatsing vanaf 3 meter mee
+              if (d > 0.003) {
                 distanceKm += d;
                 document.getElementById('live-distance').innerText = distanceKm.toFixed(2);
                 lastCoords = { lat: latitude, lng: longitude };
@@ -198,11 +217,17 @@
               lastCoords = { lat: latitude, lng: longitude };
             }
           },
-          (err) => console.error(err),
-          { enableHighAccuracy: true, maximumAge: 1000 }
+          (err) => {
+            let msg = 'Onbekende GPS fout';
+            if (err.code === 1) msg = 'Toegang geweigerd';
+            if (err.code === 2) msg = 'Geen GPS signaal';
+            if (err.code === 3) msg = 'GPS time-out';
+            statusEl.className = 'text-xs text-rose-600 mb-4 bg-rose-50 py-1.5 px-3 rounded-lg border border-rose-200 inline-block font-mono';
+            statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${msg}`;
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
       } else {
-        // Stop tracking
         isTracking = false;
         clearInterval(timerId);
         navigator.geolocation.clearWatch(watchId);
@@ -210,6 +235,9 @@
 
         btn.innerHTML = '<i class="fa-solid fa-play"></i> Start Rit';
         btn.className = 'flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md transition flex items-center justify-center gap-2';
+
+        statusEl.className = 'text-xs text-slate-400 mb-4 bg-slate-50 py-1.5 px-3 rounded-lg border border-slate-100 inline-block font-mono';
+        statusEl.innerText = 'GPS stand-by';
 
         if (distanceKm > 0.05) {
           const type = confirm('Was dit een zakelijke rit? (Klik Annuleren voor Privé)') ? 'Zakelijk' : 'Privé';
