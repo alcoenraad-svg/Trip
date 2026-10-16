@@ -85,10 +85,14 @@
             <input type="text" id="m-to" placeholder="Aankomstadres" required class="w-full mt-1 p-2 border border-slate-200 rounded-lg text-sm bg-slate-50">
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-2">
           <div>
             <label class="text-xs font-semibold text-slate-500">Afstand (km)</label>
             <input type="number" step="0.1" id="m-km" placeholder="0.0" required class="w-full mt-1 p-2 border border-slate-200 rounded-lg text-sm bg-slate-50">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Rijtijd (optioneel)</label>
+            <input type="text" id="m-duration" placeholder="bijv. 00:25" class="w-full mt-1 p-2 border border-slate-200 rounded-lg text-sm bg-slate-50">
           </div>
           <div>
             <label class="text-xs font-semibold text-slate-500">Type</label>
@@ -163,6 +167,13 @@
       document.getElementById('tab-manual-btn').className = tab === 'manual' ? 'py-2 rounded-lg bg-white shadow-sm text-blue-600 transition' : 'py-2 rounded-lg text-slate-600 transition';
     }
 
+    function formatDuration(sec) {
+      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
     function toggleTracker() {
       const btn = document.getElementById('start-btn');
       const statusEl = document.getElementById('gps-status');
@@ -188,10 +199,7 @@
 
         timerId = setInterval(() => {
           secondsElapsed++;
-          const h = String(Math.floor(secondsElapsed / 3600)).padStart(2, '0');
-          const m = String(Math.floor((secondsElapsed % 3600) / 60)).padStart(2, '0');
-          const s = String(secondsElapsed % 60).padStart(2, '0');
-          document.getElementById('live-time').innerText = `${h}:${m}:${s}`;
+          document.getElementById('live-time').innerText = formatDuration(secondsElapsed);
           const speed = secondsElapsed > 0 ? (distanceKm / (secondsElapsed / 3600)).toFixed(1) : '0.0';
           document.getElementById('live-speed').innerText = `${speed} km/u`;
         }, 1000);
@@ -207,7 +215,6 @@
 
             if (lastCoords) {
               const d = calcDistance(lastCoords.lat, lastCoords.lng, latitude, longitude);
-              // Telt elke verplaatsing vanaf 3 meter mee
               if (d > 0.003) {
                 distanceKm += d;
                 document.getElementById('live-distance').innerText = distanceKm.toFixed(2);
@@ -233,6 +240,8 @@
         navigator.geolocation.clearWatch(watchId);
         releaseWakeLock();
 
+        const durationFormatted = formatDuration(secondsElapsed);
+
         btn.innerHTML = '<i class="fa-solid fa-play"></i> Start Rit';
         btn.className = 'flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md transition flex items-center justify-center gap-2';
 
@@ -247,6 +256,7 @@
             from: 'GPS Startpunt',
             to: 'GPS Eindpunt',
             km: parseFloat(distanceKm.toFixed(2)),
+            duration: durationFormatted,
             type: type
           });
           saveTrips();
@@ -277,6 +287,7 @@
         from: document.getElementById('m-from').value,
         to: document.getElementById('m-to').value,
         km: parseFloat(document.getElementById('m-km').value),
+        duration: document.getElementById('m-duration').value || '-',
         type: document.getElementById('m-type').value
       });
       saveTrips();
@@ -312,6 +323,7 @@
             <div class="flex items-center gap-2 mb-0.5">
               <span class="text-xs font-bold ${t.type === 'Zakelijk' ? 'text-blue-600 bg-blue-50' : 'text-slate-600 bg-slate-100'} px-2 py-0.5 rounded-md">${t.type}</span>
               <span class="text-xs text-slate-400">${t.date}</span>
+              ${t.duration ? `<span class="text-xs text-slate-400 font-mono"><i class="fa-regular fa-clock ml-1"></i> ${t.duration}</span>` : ''}
             </div>
             <div class="text-sm font-semibold text-slate-700">${t.from} → ${t.to}</div>
           </div>
@@ -334,8 +346,11 @@
 
     function exportCSV() {
       if (trips.length === 0) { alert('Geen data om te exporteren'); return; }
-      let csv = 'Datum;Van;Naar;Type;Kilometers\n';
-      trips.forEach(t => { csv += `"${t.date}";"${t.from}";"${t.to}";"${t.type}";"${t.km}"\n`; });
+      let csv = 'Datum;Van;Naar;Type;Kilometers;Rijtijd\n';
+      trips.forEach(t => { 
+        const dur = t.duration || '-';
+        csv += `"${t.date}";"${t.from}";"${t.to}";"${t.type}";"${t.km}";"${dur}"\n`; 
+      });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
