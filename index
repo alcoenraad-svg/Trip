@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TripLog Pro - Ritten- & Kilometertracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            900: '#064e3b',
+                        },
+                        navy: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .tab-btn.active {
+            border-bottom: 2px solid #059669;
+            color: #059669;
+            font-weight: 600;
+        }
+        /* Subtiele animatie voor live timer puls */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .pulse-active {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                        <i class="fa-solid fa-route text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-tight">TripLog <span class="text-brand-600">Pro</span></h1>
+                        <p class="text-xs text-slate-500 font-medium">Ritten- & Kilometerregistratie</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="exportCSV()" class="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-brand-600 transition shadow-sm" title="Exporteer naar Excel CSV">
+                        <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                        <span class="hidden sm:inline">Exporteer</span> CSV
+                    </button>
+                    <button onclick="openModal('manualTripModal')" class="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition shadow-sm shadow-brand-600/30">
+                        <i class="fa-solid fa-plus"></i>
+                        <span class="hidden sm:inline">Handmatig</span> Toevoegen
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tab Navigatie -->
+            <div class="flex space-x-6 -mb-px overflow-x-auto text-sm">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn active py-3 px-1 border-b-2 font-medium flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-chart-pie text-xs"></i> Dashboard & Overzicht
+                </button>
+                <button onclick="switchTab('live')" id="tab-live" class="tab-btn py-3 px-1 border-b-2 border-transparent text-slate-500 hover:text-slate-700 font-medium flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-stopwatch text-xs"></i> Live Rit Tracker
+                    <span id="liveBadge" class="hidden px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700 rounded-full animate-pulse">Lopend</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- MELDTAB / NOTIFICATIE BANNER -->
+        <div id="alertBanner" class="hidden mb-6 p-4 rounded-xl flex items-center justify-between transition-all duration-300">
+            <div class="flex items-center gap-3">
+                <i id="alertIcon" class="fa-solid"></i>
+                <span id="alertMessage" class="text-sm font-medium"></span>
+            </div>
+            <button onclick="hideAlert()" class="text-slate-400 hover:text-slate-600 p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- SECTIE 1: LIVE RIT TRACKER TAB            -->
+        <!-- ========================================== -->
+        <div id="view-live" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
+                <div class="max-w-xl mx-auto text-center space-y-6">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        GPS Kilometer- & Tijdsregistratie
+                    </div>
+                    
+                    <h2 class="text-2xl font-bold text-slate-800">Start je rit live</h2>
+                    <p class="text-slate-500 text-sm">Zet de timer aan bij vertrek. Met GPS aan wordt de afstand automatisch berekend via coördinaten.</p>
+
+                    <!-- Stopwatch Display -->
+                    <div class="p-6 bg-slate-900 rounded-2xl shadow-inner text-white flex flex-col items-center justify-center space-y-2">
+                        <span class="text-xs uppercase tracking-widest text-slate-400 font-semibold">Tijdsduur</span>
+                        <div id="liveTimerDisplay" class="text-4xl sm:text-6xl font-mono font-bold tracking-tight text-emerald-400">
+                            00:00:00
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 w-full pt-4 border-t border-slate-800 text-center">
+                            <div>
+                                <span class="text-xs text-slate-400 block">Afgelegd (GPS)</span>
+                                <span id="liveGpsDistance" class="text-2xl font-bold text-white">0.00 <span class="text-sm font-normal text-slate-400">km</span></span>
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-400 block">GPS Status</span>
+                                <span id="gpsStatusText" class="text-xs font-medium text-amber-400 flex items-center justify-center gap-1 mt-1">
+                                    <i class="fa-solid fa-satellite"></i> Uitgeschakeld
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GPS Schakelaar -->
+                    <div class="flex items-center justify-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="gpsToggle" class="sr-only peer" onchange="toggleGpsTracking(this.checked)">
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                            <span class="ml-3 text-sm font-medium text-slate-700">Automatische GPS-afstand meten</span>
+                        </label>
+                    </div>
+
+                    <!-- Besturingsknoppen -->
+                    <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+                        <button id="btnStartTrip" onclick="startLiveTrip()" class="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-play"></i> Start Rit
+                        </button>
+                        <button id="btnPauseTrip" onclick="pauseLiveTrip()" class="hidden w-full sm:w-auto px-6 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-pause"></i> Pauzeer
+                        </button>
+                        <button id="btnStopTrip" onclick="finishLiveTripPrompt()" class="hidden w-full sm:w-auto px-8 py-3.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-flag-checkered"></i> Afronden & Opslaan
+                        </button>
+                        <button id="btnCancelTrip" onclick="cancelLiveTrip()" class="hidden text-sm text-slate-500 hover:text-red-500 py-3 px-4 font-medium transition">
+                            Annuleren
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- SECTIE 2: DASHBOARD & OVERZICHT TAB        -->
+        <!-- ========================================== -->
+        <div id="view-dashboard" class="space-y-6">
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Totaal Kilometers -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Totaal Afstand</p>
+                        <h3 id="statTotalKm" class="text-2xl font-bold text-slate-900 mt-1">0.0 km</h3>
+                        <p id="statTripsCount" class="text-xs text-slate-500 mt-1">0 ritten geregistreerd</p>
+                    </div>
+                    <div class="w-12 h-12 bg-emerald-50 text-brand-600 rounded-xl flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-road"></i>
+                    </div>
+                </div>
+
+                <!-- Zakelijk -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Zakelijk</p>
+                        <h3 id="statBusinessKm" class="text-2xl font-bold text-indigo-600 mt-1">0.0 km</h3>
+                        <p id="statBusinessPct" class="text-xs text-slate-500 mt-1">0% van totaal</p>
+                    </div>
+                    <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-briefcase"></i>
+                    </div>
+                </div>
+
+                <!-- Privé & Woon-werk -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Privé & Pendel</p>
+                        <h3 id="statPrivateKm" class="text-2xl font-bold text-amber-600 mt-1">0.0 km</h3>
+                        <p id="statPrivatePct" class="text-xs text-slate-500 mt-1">0% van totaal</p>
+                    </div>
+                    <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-car-side"></i>
+                    </div>
+                </div>
+
+                <!-- Totale Rijtijd -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Totale Rijtijd</p>
+                        <h3 id="statTotalTime" class="text-2xl font-bold text-slate-800 mt-1">0u 0m</h3>
+                        <p class="text-xs text-slate-500 mt-1">Uren onderweg</p>
+                    </div>
+                    <div class="w-12 h-12 bg-sky-50 text-sky-600 rounded-xl flex items-center justify-center text-xl">
+                        <i class="fa-regular fa-clock"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <!-- Filters & Zoekbalk -->
+                <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                    <div class="flex-1 relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="filterSearch" placeholder="Zoek op locatie, omschrijving of voertuig..." oninput="renderTripsTable()" class="w-full pl-10 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition">
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="filterType" onchange="renderTripsTable()" class="text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                            <option value="all">Alle types</option>
+                            <option value="zakelijk">Zakelijk</option>
+                            <option value="prive">Privé</option>
+                            <option value="woon-werk">Woon-werk</option>
+                        </select>
+                        <select id="filterPeriod" onchange="renderTripsTable()" class="text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                            <option value="all">Alle periodes</option>
+                            <option value="this-month">Deze maand</option>
+                            <option value="last-month">Vorige maand</option>
+                            <option value="this-year">Dit jaar</option>
+                        </select>
+                        <button onclick="resetFilters()" class="text-xs text-slate-500 hover:text-slate-800 p-2 font-medium" title="Filters wissen">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabel -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-600">
+                        <thead class="bg-slate-50 text-slate-500 uppercase font-semibold text-[11px] tracking-wider border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3.5">Datum</th>
+                                <th class="px-4 py-3.5">Route (Van &rarr; Naar)</th>
+                                <th class="px-4 py-3.5">Type</th>
+                                <th class="px-4 py-3.5 text-right">Afstand</th>
+                                <th class="px-4 py-3.5 text-right">Duur</th>
+                                <th class="px-4 py-3.5 text-center">Acties</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tripsTableBody" class="divide-y divide-slate-100">
+                            <!-- Dynamisch gevuld via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Lege staat -->
+                <div id="emptyState" class="hidden py-14 text-center px-4">
+                    <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fa-solid fa-car text-2xl"></i>
+                    </div>
+                    <h4 class="text-base font-semibold text-slate-800">Geen ritten gevonden</h4>
+                    <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Start een live rit met de tracker of voeg handmatig een gereden rit toe.</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL: HANDMATIG TOEVOEGEN / BEWERKEN -->
+    <div id="manualTripModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden my-8">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <h3 id="modalFormTitle" class="font-bold text-slate-800 text-base">Nieuwe Rit Invoeren</h3>
+                <button onclick="closeModal('manualTripModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <form id="tripForm" onsubmit="handleSaveTrip(event)" class="p-6 space-y-4">
+                <input type="hidden" id="fieldTripId">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Datum</label>
+                        <input type="date" id="fieldDate" required class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Type Rit</label>
+                        <select id="fieldType" required class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                            <option value="zakelijk">Zakelijk</option>
+                            <option value="prive">Privé</option>
+                            <option value="woon-werk">Woon-werk</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Afstand invoer: direct of km-standen -->
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700 uppercase">Kilometers Berekening</span>
+                        <div class="text-xs text-brand-600 cursor-pointer font-medium hover:underline" onclick="toggleOdometerInputs()">
+                            <span id="odoToggleLabel">Gebruik tellerstanden</span>
+                        </div>
+                    </div>
+                    
+                    <div id="simpleKmWrap">
+                        <label class="block text-xs text-slate-500 mb-1">Afgelegde afstand (km)</label>
+                        <input type="number" step="0.1" id="fieldDistance" placeholder="bijv. 42.5" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                    </div>
+
+                    <div id="odometerWrap" class="hidden grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Beginstand (km)</label>
+                            <input type="number" step="0.1" id="fieldStartKm" oninput="calcKmDifference()" placeholder="124500" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Eindstand (km)</label>
+                            <input type="number" step="0.1" id="fieldEndKm" oninput="calcKmDifference()" placeholder="124542" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tijdsduur -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Duur Uren</label>
+                        <input type="number" min="0" id="fieldDurationHours" placeholder="0" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Duur Minuten</label>
+                        <input type="number" min="0" max="59" id="fieldDurationMinutes" placeholder="45" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Locaties -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Vertrekpunt</label>
+                        <input type="text" id="fieldOrigin" placeholder="bijv. Amsterdam" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Bestemming</label>
+                        <input type="text" id="fieldDestination" placeholder="bijv. Utrecht" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Voertuig & Notities -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="sm:col-span-1">
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Kenteken/Auto</label>
+                        <input type="text" id="fieldVehicle" placeholder="bijv. AB-123-C" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Doel / Omschrijving</label>
+                        <input type="text" id="fieldNotes" placeholder="bijv. Klantbezoek Acme BV" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-200">
+                    <button type="button" onclick="closeModal('manualTripModal')" class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium">Annuleren</button>
+                    <button type="submit" class="px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-sm">Rit Opslaan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: LIVE RIT AFRONDEN -->
+    <div id="finishLiveModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden my-8">
+            <div class="px-6 py-4 bg-emerald-600 text-white flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-base">Rit Voltooid!</h3>
+                    <p class="text-xs text-emerald-100">Controleer en sla de gegevens op</p>
+                </div>
+                <i class="fa-solid fa-flag-checkered text-2xl opacity-75"></i>
+            </div>
+            
+            <form id="finishLiveForm" onsubmit="saveFinishedLiveTrip(event)" class="p-6 space-y-4">
+                <div class="p-4 bg-slate-50 border border-slate-100 rounded-xl grid grid-cols-2 gap-2 text-center">
+                    <div>
+                        <span class="text-xs text-slate-400 font-medium uppercase">Gemeten Afstand</span>
+                        <div class="flex items-center justify-center gap-1 mt-1">
+                            <input type="number" step="0.1" id="liveSaveDistance" required class="w-24 text-center font-bold text-lg text-slate-800 border-b border-slate-300 focus:border-brand-500 focus:outline-none">
+                            <span class="text-xs text-slate-500">km</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 font-medium uppercase">Totale Tijdsduur</span>
+                        <div id="liveSaveDurationText" class="text-lg font-bold text-slate-800 mt-1">00:00:00</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Type Rit</label>
+                    <select id="liveSaveType" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                        <option value="zakelijk">Zakelijk</option>
+                        <option value="prive">Privé</option>
+                        <option value="woon-werk">Woon-werk</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Van</label>
+                        <input type="text" id="liveSaveOrigin" placeholder="Vertreklocatie" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Naar</label>
+                        <input type="text" id="liveSaveDest" placeholder="Bestemming" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Doel / Omschrijving</label>
+                    <input type="text" id="liveSaveNotes" placeholder="bijv. Afspraak cliënt" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                </div>
+
+                <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-200">
+                    <button type="button" onclick="closeModal('finishLiveModal')" class="px-4 py-2 text-sm text-slate-600 font-medium">Terug</button>
+                    <button type="submit" class="px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-sm">Opslaan in Overzicht</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // STATE EN DATA STRUCTUUR
+        // ==========================================
+        const STORAGE_KEY = 'triplog_pro_data_v1';
+        let trips = [];
+
+        // Live Tracker State
+        let liveState = {
+            isRunning: false,
+            isPaused: false,
+            startTime: null,
+            elapsedSeconds: 0,
+            timerInterval: null,
+            watchId: null,
+            lastCoords: null,
+            accumulatedKm: 0,
+            gpsEnabled: false
+        };
+
+        // ==========================================
+        // INITIALISATIE
+        // ==========================================
+        window.onload = function() {
+            loadTrips();
+            initDateDefaults();
+            renderTripsTable();
+            updateDashboardStats();
+        };
+
+        function initDateDefaults() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('fieldDate').value = today;
+        }
+
+        function loadTrips() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            if (data) {
+                try {
+                    trips = JSON.parse(data);
+                } catch(e) {
+                    console.error("Fout bij laden van ritten:", e);
+                    trips = [];
+                }
+            } else {
+                // Voorbeelddata voor directe demonstratie bij eerste keer openen
+                trips = [
+                    {
+                        id: 'demo-1',
+                        date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+                        type: 'zakelijk',
+                        distance: 54.2,
+                        durationMinutes: 48,
+                        origin: 'Amsterdam Zuid',
+                        destination: 'Utrecht Centraal',
+                        vehicle: '72-XYZ-4',
+                        notes: 'Project kickoff klant'
+                    },
+                    {
+                        id: 'demo-2',
+                        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+                        type: 'woon-werk',
+                        distance: 28.0,
+                        durationMinutes: 32,
+                        origin: 'Utrecht',
+                        destination: 'Amersfoort Kantoor',
+                        vehicle: '72-XYZ-4',
+                        notes: 'Reguliere werkdag'
+                    }
+                ];
+                saveTripsToStorage();
+            }
+        }
+
+        function saveTripsToStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+        }
+
+        // ==========================================
+        // UI & TAB MANAGEMENT
+        // ==========================================
+        function switchTab(tab) {
+            const tabDash = document.getElementById('tab-dashboard');
+            const tabLive = document.getElementById('tab-live');
+            const viewDash = document.getElementById('view-dashboard');
+            const viewLive = document.getElementById('view-live');
+
+            if (tab === 'dashboard') {
+                tabDash.classList.add('active');
+                tabLive.classList.remove('active');
+                viewDash.classList.remove('hidden');
+                viewLive.classList.add('hidden');
+            } else {
+                tabLive.classList.add('active');
+                tabDash.classList.remove('active');
+                viewLive.classList.remove('hidden');
+                viewDash.classList.add('hidden');
+            }
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function showAlert(msg, isSuccess = true) {
+            const banner = document.getElementById('alertBanner');
+            const text = document.getElementById('alertMessage');
+            const icon = document.getElementById('alertIcon');
+
+            banner.className = `mb-6 p-4 rounded-xl flex items-center justify-between transition-all duration-300 ${
+                isSuccess ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+            }`;
+            icon.className = `fa-solid ${isSuccess ? 'fa-circle-check text-emerald-600' : 'fa-circle-exclamation text-red-600'}`;
+            text.textContent = msg;
+            banner.classList.remove('hidden');
+
+            setTimeout(() => {
+                hideAlert();
+            }, 5000);
+        }
+
+        function hideAlert() {
+            document.getElementById('alertBanner').classList.add('hidden');
+        }
+
+        // ==========================================
+        // LIVE TRACKER LOGICA & HAVERSINE GPS
+        // ==========================================
+        function toggleGpsTracking(enabled) {
+            liveState.gpsEnabled = enabled;
+            const statusText = document.getElementById('gpsStatusText');
+
+            if (!enabled) {
+                if (liveState.watchId) {
+                    navigator.geolocation.clearWatch(liveState.watchId);
+                    liveState.watchId = null;
+                }
+                statusText.innerHTML = `<i class="fa-solid fa-satellite"></i> Uitgeschakeld`;
+                statusText.className = "text-xs font-medium text-slate-400 flex items-center justify-center gap-1 mt-1";
+                return;
+            }
+
+            if (!("geolocation" in navigator)) {
+                showAlert("Geolocatie wordt niet ondersteund door deze browser.", false);
+                document.getElementById('gpsToggle').checked = false;
+                liveState.gpsEnabled = false;
+                return;
+            }
+
+            statusText.innerHTML = `<i class="fa-solid fa-satellite-dish animate-spin"></i> Bezig met zoeken...`;
+            statusText.className = "text-xs font-medium text-amber-500 flex items-center justify-center gap-1 mt-1";
+
+            if (liveState.isRunning && !liveState.isPaused) {
+                startGeolocationWatch();
+            }
+        }
+
+        function startGeolocationWatch() {
+            if (!liveState.gpsEnabled || !navigator.geolocation) return;
+
+            liveState.watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const statusText = document.getElementById('gpsStatusText');
+                    statusText.innerHTML = `<i class="fa-solid fa-satellite"></i> GPS Actief`;
+                    statusText.className = "text-xs font-medium text-emerald-500 flex items-center justify-center gap-1 mt-1";
+
+                    const currentCoords = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude
+                    };
+
+                    if (liveState.lastCoords && liveState.isRunning && !liveState.isPaused) {
+                        const distKm = calculateDistanceHaversine(
+                            liveState.lastCoords.lat,
+                            liveState.lastCoords.lng,
+                            currentCoords.lat,
+                            currentCoords.lng
+                        );
+
+                        // Filter GPS jitter/ruis (minimaal 10 meter verplaatst)
+                        if (distKm > 0.01) {
+                            liveState.accumulatedKm += distKm;
+                            document.getElementById('liveGpsDistance').innerHTML = `${liveState.accumulatedKm.toFixed(2)} <span class="text-sm font-normal text-slate-400">km</span>`;
+                            liveState.lastCoords = currentCoords;
+                        }
+                    } else {
+                        liveState.lastCoords = currentCoords;
+                    }
+                },
+                (err) => {
+                    console.warn("GPS fout:", err.message);
+                    const statusText = document.getElementById('gpsStatusText');
+                    statusText.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> GPS Signaal Verbroken`;
+                    statusText.className = "text-xs font-medium text-red-500 flex items-center justify-center gap-1 mt-1";
+                },
+                { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+            );
+        }
+
+        // Haversine formule voor afstand over de aarde
+        function calculateDistanceHaversine(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Aardstraal in kilometers
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function startLiveTrip() {
+            liveState.isRunning = true;
+            liveState.isPaused = false;
+            
+            document.getElementById('btnStartTrip').classList.add('hidden');
+            document.getElementById('btnPauseTrip').classList.remove('hidden');
+            document.getElementById('btnStopTrip').classList.remove('hidden');
+            document.getElementById('btnCancelTrip').classList.remove('hidden');
+            document.getElementById('liveBadge').classList.remove('hidden');
+
+            if (liveState.gpsEnabled) {
+                startGeolocationWatch();
+            }
+
+            liveState.timerInterval = setInterval(() => {
+                liveState.elapsedSeconds++;
+                updateLiveTimerUI();
+            }, 1000);
+        }
+
+        function pauseLiveTrip() {
+            if (!liveState.isPaused) {
+                // Pauzeren
+                liveState.isPaused = true;
+                clearInterval(liveState.timerInterval);
+                document.getElementById('btnPauseTrip').innerHTML = `<i class="fa-solid fa-play"></i> Hervat`;
+                document.getElementById('btnPauseTrip').className = "w-full sm:w-auto px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2";
+            } else {
+                // Hervatten
+                liveState.isPaused = false;
+                document.getElementById('btnPauseTrip').innerHTML = `<i class="fa-solid fa-pause"></i> Pauzeer`;
+                document.getElementById('btnPauseTrip').className = "w-full sm:w-auto px-6 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2";
+                
+                liveState.timerInterval = setInterval(() => {
+                    liveState.elapsedSeconds++;
+                    updateLiveTimerUI();
+                }, 1000);
+            }
+        }
+
+        function updateLiveTimerUI() {
+            const hrs = String(Math.floor(liveState.elapsedSeconds / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((liveState.elapsedSeconds % 3600) / 60)).padStart(2, '0');
+            const secs = String(liveState.elapsedSeconds % 60).padStart(2, '0');
+            document.getElementById('liveTimerDisplay').textContent = `${hrs}:${mins}:${secs}`;
+        }
+
+        function cancelLiveTrip() {
+            // Geen alert() conform regels; duidelijke inline reset
+            resetLiveTracker();
+            showAlert("Live registratie geannuleerd.", false);
+        }
+
+        function resetLiveTracker() {
+            clearInterval(liveState.timerInterval);
+            if (liveState.watchId) {
+                navigator.geolocation.clearWatch(liveState.watchId);
+                liveState.watchId = null;
+            }
+            liveState.isRunning = false;
+            liveState.isPaused = false;
+            liveState.elapsedSeconds = 0;
+            liveState.accumulatedKm = 0;
+            liveState.lastCoords = null;
+
+            document.getElementById('liveTimerDisplay').textContent = "00:00:00";
+            document.getElementById('liveGpsDistance').innerHTML = `0.00 <span class="text-sm font-normal text-slate-400">km</span>`;
+            document.getElementById('btnStartTrip').classList.remove('hidden');
+            document.getElementById('btnPauseTrip').classList.add('hidden');
+            document.getElementById('btnStopTrip').classList.add('hidden');
+            document.getElementById('btnCancelTrip').classList.add('hidden');
+            document.getElementById('liveBadge').classList.add('hidden');
+            document.getElementById('btnPauseTrip').innerHTML = `<i class="fa-solid fa-pause"></i> Pauzeer`;
+        }
+
+        function finishLiveTripPrompt() {
+            clearInterval(liveState.timerInterval);
+            
+            const hrs = String(Math.floor(liveState.elapsedSeconds / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((liveState.elapsedSeconds % 3600) / 60)).padStart(2, '0');
+            const secs = String(liveState.elapsedSeconds % 60).padStart(2, '0');
+            
+            document.getElementById('liveSaveDurationText').textContent = `${hrs}:${mins}:${secs}`;
+            document.getElementById('liveSaveDistance').value = (liveState.accumulatedKm > 0 ? liveState.accumulatedKm.toFixed(1) : 0);
+            
+            openModal('finishLiveModal');
+        }
+
+        function saveFinishedLiveTrip(e) {
+            e.preventDefault();
+            const dist = parseFloat(document.getElementById('liveSaveDistance').value) || 0;
+            const durationMins = Math.max(1, Math.round(liveState.elapsedSeconds / 60));
+
+            const newTrip = {
+                id: 'trip_' + Date.now(),
+                date: new Date().toISOString().split('T')[0],
+                type: document.getElementById('liveSaveType').value,
+                distance: dist,
+                durationMinutes: durationMins,
+                origin: document.getElementById('liveSaveOrigin').value || 'Vertrekpunt',
+                destination: document.getElementById('liveSaveDest').value || 'Bestemming',
+                vehicle: 'Mijn Voertuig',
+                notes: document.getElementById('liveSaveNotes').value || ''
+            };
+
+            trips.unshift(newTrip);
+            saveTripsToStorage();
+            
+            closeModal('finishLiveModal');
+            document.getElementById('finishLiveForm').reset();
+            resetLiveTracker();
+            
+            renderTripsTable();
+            updateDashboardStats();
+            switchTab('dashboard');
+            showAlert("Live rit succesvol geregistreerd en opgeslagen!");
+        }
+
+        // ==========================================
+        // FORMULIER LOGICA (HANDMATIG / BEWERKEN)
+        // ==========================================
+        let usingOdometer = false;
+        function toggleOdometerInputs() {
+            usingOdometer = !usingOdometer;
+            const simpleWrap = document.getElementById('simpleKmWrap');
+            const odoWrap = document.getElementById('odometerWrap');
+            const label = document.getElementById('odoToggleLabel');
+
+            if (usingOdometer) {
+                simpleWrap.classList.add('hidden');
+                odoWrap.classList.remove('hidden');
+                label.textContent = "Gebruik direct aantal km";
+            } else {
+                simpleWrap.classList.remove('hidden');
+                odoWrap.classList.add('hidden');
+                label.textContent = "Gebruik tellerstanden";
+            }
+        }
+
+        function calcKmDifference() {
+            const start = parseFloat(document.getElementById('fieldStartKm').value) || 0;
+            const end = parseFloat(document.getElementById('fieldEndKm').value) || 0;
+            if (end > start) {
+                document.getElementById('fieldDistance').value = (end - start).toFixed(1);
+            }
+        }
+
+        function handleSaveTrip(e) {
+            e.preventDefault();
+            const tripId = document.getElementById('fieldTripId').value;
+            const hours = parseInt(document.getElementById('fieldDurationHours').value) || 0;
+            const mins = parseInt(document.getElementById('fieldDurationMinutes').value) || 0;
+            const totalDurationMins = (hours * 60) + mins;
+
+            let distance = parseFloat(document.getElementById('fieldDistance').value) || 0;
+            if (usingOdometer) {
+                const s = parseFloat(document.getElementById('fieldStartKm').value) || 0;
+                const end = parseFloat(document.getElementById('fieldEndKm').value) || 0;
+                if (end > s) distance = end - s;
+            }
+
+            const tripPayload = {
+                id: tripId ? tripId : 'trip_' + Date.now(),
+                date: document.getElementById('fieldDate').value,
+                type: document.getElementById('fieldType').value,
+                distance: parseFloat(distance.toFixed(1)),
+                durationMinutes: totalDurationMins,
+                origin: document.getElementById('fieldOrigin').value || 'Onbekend',
+                destination: document.getElementById('fieldDestination').value || 'Onbekend',
+                vehicle: document.getElementById('fieldVehicle').value || '',
+                notes: document.getElementById('fieldNotes').value || ''
+            };
+
+            if (tripId) {
+                // Update bestaande rit
+                const index = trips.findIndex(t => t.id === tripId);
+                if (index !== -1) {
+                    trips[index] = tripPayload;
+                    showAlert("Rit bijgewerkt!");
+                }
+            } else {
+                // Nieuwe rit
+                trips.unshift(tripPayload);
+                showAlert("Nieuwe rit succesvol toegevoegd!");
+            }
+
+            saveTripsToStorage();
+            closeModal('manualTripModal');
+            resetTripForm();
+            renderTripsTable();
+            updateDashboardStats();
+        }
+
+        function editTrip(id) {
+            const trip = trips.find(t => t.id === id);
+            if (!trip) return;
+
+            document.getElementById('modalFormTitle').textContent = "Rit Bewerken";
+            document.getElementById('fieldTripId').value = trip.id;
+            document.getElementById('fieldDate').value = trip.date;
+            document.getElementById('fieldType').value = trip.type;
+            document.getElementById('fieldDistance').value = trip.distance;
+            
+            const hours = Math.floor(trip.durationMinutes / 60);
+            const mins = trip.durationMinutes % 60;
+            document.getElementById('fieldDurationHours').value = hours;
+            document.getElementById('fieldDurationMinutes').value = mins;
+
+            document.getElementById('fieldOrigin').value = trip.origin;
+            document.getElementById('fieldDestination').value = trip.destination;
+            document.getElementById('fieldVehicle').value = trip.vehicle || '';
+            document.getElementById('fieldNotes').value = trip.notes || '';
+
+            openModal('manualTripModal');
+        }
+
+        function deleteTrip(id) {
+            // Verwijder rit
+            trips = trips.filter(t => t.id !== id);
+            saveTripsToStorage();
+            renderTripsTable();
+            updateDashboardStats();
+            showAlert("Rit verwijderd.", true);
+        }
+
+        function resetTripForm() {
+            document.getElementById('tripForm').reset();
+            document.getElementById('fieldTripId').value = '';
+            document.getElementById('modalFormTitle').textContent = "Nieuwe Rit Invoeren";
+            initDateDefaults();
+            if (usingOdometer) toggleOdometerInputs();
+        }
+
+        // ==========================================
+        // TABEL & FILTERS
+        // ==========================================
+        function getFilteredTrips() {
+            const query = document.getElementById('filterSearch').value.toLowerCase().trim();
+            const typeFilter = document.getElementById('filterType').value;
+            const periodFilter = document.getElementById('filterPeriod').value;
+            const now = new Date();
+
+            return trips.filter(trip => {
+                // Tekstzoekopdracht
+                const matchesSearch = 
+                    trip.origin.toLowerCase().includes(query) ||
+                    trip.destination.toLowerCase().includes(query) ||
+                    (trip.notes && trip.notes.toLowerCase().includes(query)) ||
+                    (trip.vehicle && trip.vehicle.toLowerCase().includes(query));
+
+                // Type filter
+                const matchesType = (typeFilter === 'all' || trip.type === typeFilter);
+
+                // Periode filter
+                let matchesPeriod = true;
+                const tripDate = new Date(trip.date);
+                if (periodFilter === 'this-month') {
+                    matchesPeriod = (tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear());
+                } else if (periodFilter === 'last-month') {
+                    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                    matchesPeriod = (tripDate.getMonth() === prevMonth.getMonth() && tripDate.getFullYear() === prevMonth.getFullYear());
+                } else if (periodFilter === 'this-year') {
+                    matchesPeriod = (tripDate.getFullYear() === now.getFullYear());
+                }
+
+                return matchesSearch && matchesType && matchesPeriod;
+            });
+        }
+
+        function renderTripsTable() {
+            const tbody = document.getElementById('tripsTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const filtered = getFilteredTrips();
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            tbody.innerHTML = filtered.map(t => {
+                const typeBadges = {
+                    'zakelijk': '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60"><i class="fa-solid fa-briefcase text-[10px] mr-1"></i> Zakelijk</span>',
+                    'prive': '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60"><i class="fa-solid fa-house-user text-[10px] mr-1"></i> Privé</span>',
+                    'woon-werk': '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><i class="fa-solid fa-arrows-split-up-and-left text-[10px] mr-1"></i> Pendel</span>'
+                };
+
+                const h = Math.floor(t.durationMinutes / 60);
+                const m = t.durationMinutes % 60;
+                const durationFormatted = (h > 0 ? `${h}u ` : '') + `${m}m`;
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-4 py-3.5 whitespace-nowrap">
+                            <span class="font-medium text-slate-800">${formatDateNL(t.date)}</span>
+                            ${t.vehicle ? `<span class="block text-xs text-slate-400 font-mono">${t.vehicle}</span>` : ''}
+                        </td>
+                        <td class="px-4 py-3.5">
+                            <div class="flex items-center gap-1.5 font-medium text-slate-800">
+                                <span>${t.origin}</span>
+                                <i class="fa-solid fa-arrow-right text-[11px] text-slate-400"></i>
+                                <span>${t.destination}</span>
+                            </div>
+                            ${t.notes ? `<p class="text-xs text-slate-500 mt-0.5 line-clamp-1 italic">${t.notes}</p>` : ''}
+                        </td>
+                        <td class="px-4 py-3.5 whitespace-nowrap">
+                            ${typeBadges[t.type] || t.type}
+                        </td>
+                        <td class="px-4 py-3.5 text-right whitespace-nowrap font-semibold text-slate-800">
+                            ${t.distance.toFixed(1)} km
+                        </td>
+                        <td class="px-4 py-3.5 text-right whitespace-nowrap text-slate-600 font-medium">
+                            ${durationFormatted}
+                        </td>
+                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                            <div class="flex items-center justify-center gap-2">
+                                <button onclick="editTrip('${t.id}')" class="p-1.5 text-slate-400 hover:text-indigo-600 transition" title="Bewerken">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button onclick="deleteTrip('${t.id}')" class="p-1.5 text-slate-400 hover:text-red-600 transition" title="Verwijderen">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetFilters() {
+            document.getElementById('filterSearch').value = '';
+            document.getElementById('filterType').value = 'all';
+            document.getElementById('filterPeriod').value = 'all';
+            renderTripsTable();
+        }
+
+        function formatDateNL(dateStr) {
+            if (!dateStr) return '';
+            const [y, m, d] = dateStr.split('-');
+            return `${d}-${m}-${y}`;
+        }
+
+        // ==========================================
+        // DASHBOARD STATISTIEKEN
+        // ==========================================
+        function updateDashboardStats() {
+            const totalKm = trips.reduce((sum, t) => sum + (t.distance || 0), 0);
+            const businessKm = trips.filter(t => t.type === 'zakelijk').reduce((sum, t) => sum + (t.distance || 0), 0);
+            const privateKm = trips.filter(t => t.type === 'prive' || t.type === 'woon-werk').reduce((sum, t) => sum + (t.distance || 0), 0);
+            const totalMinutes = trips.reduce((sum, t) => sum + (t.durationMinutes || 0), 0);
+
+            document.getElementById('statTotalKm').textContent = `${totalKm.toFixed(1)} km`;
+            document.getElementById('statTripsCount').textContent = `${trips.length} ritten geregistreerd`;
+
+            const bPct = totalKm > 0 ? Math.round((businessKm / totalKm) * 100) : 0;
+            const pPct = totalKm > 0 ? Math.round((privateKm / totalKm) * 100) : 0;
+
+            document.getElementById('statBusinessKm').textContent = `${businessKm.toFixed(1)} km`;
+            document.getElementById('statBusinessPct').textContent = `${bPct}% van totaal`;
+
+            document.getElementById('statPrivateKm').textContent = `${privateKm.toFixed(1)} km`;
+            document.getElementById('statPrivatePct').textContent = `${pPct}% van totaal`;
+
+            const totalHours = Math.floor(totalMinutes / 60);
+            const remMinutes = totalMinutes % 60;
+            document.getElementById('statTotalTime').textContent = `${totalHours}u ${remMinutes}m`;
+        }
+
+        // ==========================================
+        // EXPORT NAAR CSV (EXCEL-VRIENDELIJK)
+        // ==========================================
+        function exportCSV() {
+            if (trips.length === 0) {
+                showAlert("Er zijn nog geen ritten om te exporteren.", false);
+                return;
+            }
+
+            // CSV Header met puntkomma voor directe compatibiliteit met Nederlandse Excel versies
+            const headers = ["Datum", "Van", "Naar", "Type", "Afstand (km)", "Duur (minuten)", "Kenteken", "Notities"];
+            const rows = trips.map(t => [
+                `"${formatDateNL(t.date)}"`,
+                `"${(t.origin || '').replace(/"/g, '""')}"`,
+                `"${(t.destination || '').replace(/"/g, '""')}"`,
+                `"${t.type}"`,
+                `"${t.distance.toFixed(1).replace('.', ',')}"`, // Komma voor Nederlandse Excel
+                `"${t.durationMinutes}"`,
+                `"${(t.vehicle || '').replace(/"/g, '""')}"`,
+                `"${(t.notes || '').replace(/"/g, '""')}"`
+            ]);
+
+            const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map(e => e.join(";"))].join("\r\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `rittenregistratie_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showAlert("Rittenregistratie succesvol gedownload als CSV-bestand!");
+        }
+    </script>
+</body>
+</html>
